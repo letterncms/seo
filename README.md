@@ -9,3 +9,7 @@ From Modules → Store in the admin, or:
 ```bash
 composer require letterncms/seo
 ```
+
+---
+
+This repository is published from [letterncms/plugins-public](https://github.com/letterncms/plugins-public/tree/main/seo). Open issues and pull requests there.
