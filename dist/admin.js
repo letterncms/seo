@@ -211,7 +211,6 @@ function x({ id: e, onClose: t }) {
 	});
 }
 t.panels.set("seo", {
-	id: "seo",
 	slot: "entry.sidebar",
 	fieldHandles: ["seo"],
 	label: "SEO",
