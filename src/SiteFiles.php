@@ -8,7 +8,7 @@ use Cms\Support\Brand;
 use Cms\Content\Entries\Entry;
 use Cms\Cms;
 
-/** sitemap.xml, robots.txt and llms.txt. */
+/** sitemap.xml and robots.txt, and what SEO adds to the site's llms.txt. */
 final class SiteFiles
 {
     /** Crawlers that feed AI products — each can be allowed or blocked in settings. */
@@ -89,10 +89,23 @@ final class SiteFiles
                 .'</url>';
         }
 
-        // Addresses a plugin answers itself, for the default language's sitemap.
-        if ($locale === null || $locale === $this->cms->defaultLocale()) {
-            foreach ((array) $this->cms->hooks()->filter('seo.sitemap', []) as $url) {
-                $xml[] = '<url><loc>'.e((string) $this->meta->absolute((string) $url['uri'])).'</loc>'.(($url['updated'] ?? null) ? '<lastmod>'.e((string) $url['updated']).'</lastmod>' : '').'</url>';
+        // Addresses the core or a plugin answers itself: in the sitemap of the language they say (`locale`),
+        // and in the default language's when they say none.
+        foreach ((array) $this->cms->hooks()->filter('seo.sitemap', [], $locale) as $url) {
+            // One that stands for an entry (a term's archive is the term at another address): left out when the
+            // entry is kept out of search, and with the addresses of its other languages, as a page has them.
+            $page = ($url['entry'] ?? null) instanceof Entry ? clone $url['entry'] : null;
+
+            if ($page && ! empty($page->data['seo']['noindex'])) {
+                continue;
+            }
+
+            $page && $page->uri = (string) $url['uri'];
+
+            if ($locale === null || ($url['locale'] ?? $this->cms->defaultLocale()) === $locale) {
+                $xml[] = '<url><loc>'.e((string) $this->meta->absolute((string) $url['uri'])).'</loc>'.(($url['updated'] ?? null) ? '<lastmod>'.e((string) $url['updated']).'</lastmod>' : '')
+                    .($page ? implode('', array_map(fn ($alt) => '<xhtml:link rel="alternate" hreflang="'.e($alt['locale']).'" href="'.e((string) $this->meta->absolute($alt['uri'])).'"/>', $this->cms->hooks()->filter('seo.alternates', [], $page))) : '')
+                    .'</url>';
             }
         }
 
@@ -124,7 +137,6 @@ final class SiteFiles
         return implode("\n", $lines)."\n";
     }
 
-    /** llms.txt — a curated map of the site for language models (llmstxt.org). */
     /** RFC 9116. Null until the site names a contact. Written fresh, so it is a year from expiring whenever it is built. */
     public function securityTxt(): ?string
     {
@@ -139,39 +151,29 @@ final class SiteFiles
         return "Contact: {$uri}\nExpires: ".now()->addYear()->utc()->format('Y-m-d\TH:i:s\Z')."\n";
     }
 
-    public function llms(): string
+    /**
+     * The site's llms.txt (the core writes it, see `site.llms`), as SEO knows the pages: the summary written
+     * for it, only pages search engines may list, each with its description and linked as its Markdown twin.
+     *
+     * @param  array{title: string, summary: string, sections: array<string, list<array{title: string, url: string, description: string, entry: Entry}>>}  $document
+     */
+    public function llms(array $document): array
     {
-        $site = (string) config('app.name');
-        $description = (string) ($this->meta->settings('llms_summary') ?: $this->cms->setting('site', 'description') ?: '');
-        $lines = ["# {$site}", ''];
+        $summary = trim((string) $this->meta->settings('llms_summary', ''));
+        $listed = array_flip(array_map(static fn (Entry $entry) => $entry->id, $this->pages()));
 
-        if ($description !== '') {
-            $lines[] = '> '.trim($description);
-            $lines[] = '';
+        foreach ($document['sections'] as $title => $pages) {
+            $document['sections'][$title] = array_values(array_map(function (array $page) {
+                $entry = $page['entry'];
+
+                return [
+                    ...$page,
+                    'url' => (string) $this->meta->absolute($entry->uri === '/' ? '/index.md' : $entry->uri.'.md'),
+                    'description' => (string) $this->meta->forEntry($entry)['description'],
+                ];
+            }, array_filter($pages, static fn (array $page) => ($page['entry'] ?? null) instanceof Entry && isset($listed[$page['entry']->id]))));
         }
 
-        $groups = [];
-
-        // The map stays in the site's default language; pages link their other languages themselves.
-        foreach ($this->pages() as $entry) {
-            if ($entry->locale === $this->cms->defaultLocale()) {
-                $groups[$entry->collection()->title][] = $entry;
-            }
-        }
-
-        foreach ($groups as $title => $entries) {
-            $lines[] = "## {$title}";
-            $lines[] = '';
-
-            foreach (array_slice($entries, 0, 200) as $entry) {
-                $m = $this->meta->forEntry($entry);
-                $md = $entry->uri === '/' ? '/index.md' : $entry->uri.'.md';
-                $lines[] = '- ['.$entry->title.']('.$this->meta->absolute($md).')'.($m['description'] !== '' ? ': '.$m['description'] : '');
-            }
-
-            $lines[] = '';
-        }
-
-        return implode("\n", $lines);
+        return [...$document, 'summary' => $summary !== '' ? $summary : $document['summary']];
     }
 }

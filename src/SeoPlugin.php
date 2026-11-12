@@ -34,21 +34,21 @@ final class SeoPlugin extends Plugin
 
     /**
      * Redirects are a tab of the SEO settings: one table, saved from the save bar like the settings beside it.
-     * New Redirect is in the bar; with none yet, the tab says so.
+     * New Redirect is in the bar; with none yet, the tab says so and offers it in the table's place.
      */
     private function redirectsTab(): void
     {
-        // The one way to make a redirect, once: in the bar while the tab is on view, also while there are none.
+        // The one way to make a redirect: in the bar while the tab is on view, and in the table's place while there are none.
         $new = ['label' => __('New Redirect'), 'icon' => 'plus', 'variant' => 'primary', 'ability' => 'redirects/create', 'then' => 'refresh',
             'input' => ['from' => '{values.from}', 'to' => '{values.to}', 'status' => '{values.status}'],
             'form' => ['title' => __('New Redirect'), 'confirm' => __('Create Redirect'), 'values' => ['status' => 301], 'fields' => self::redirectFields(autofocus: true)]];
 
         $this->cms()->hooks()->addFilter('view.settings', fn (array $view, User $user, array $params) => ($params['namespace'] ?? '') !== 'seo' || ! $user->hasPermission('seo.manage') ? $view : SettingsModule::withTab($view, [
             'type' => 'ui/tab', 'props' => ['id' => 'redirects', 'label' => __('Redirects'), 'actions' => [$new]], 'children' => [$this->app->make(Redirects::class)->all() === []
-                ? ['type' => 'ui/empty', 'props' => ['icon' => 'arrow-right', 'title' => __('No redirects yet')]]
+                ? ['type' => 'ui/empty', 'props' => ['icon' => 'arrow-right', 'title' => __('No redirects yet'), 'action' => array_diff_key($new, ['variant' => true])]]
                 : ['type' => 'ui/form', 'props' => [
                     'source' => ['ability' => 'redirects/list'], 'into' => 'redirects', 'width' => 'wide',
-                    'fields' => [['handle' => 'redirects', 'type' => 'repeater', 'display' => 'table', 'label' => __('Redirects'), 'add' => __('Add Redirect'), 'fields' => self::redirectFields()]],
+                    'fields' => [['handle' => 'redirects', 'type' => 'repeater', 'display' => 'table', 'label' => __('Redirects'), 'add' => false, 'removeLabel' => __('Delete'), 'fields' => self::redirectFields()]],
                     'save' => ['ability' => 'redirects/set', 'as' => '*'],
                 ]],
             ],
@@ -61,7 +61,8 @@ final class SeoPlugin extends Plugin
         return [
             ['handle' => 'from', 'type' => 'text', 'label' => __('From'), 'mono' => true, 'placeholder' => '/old-url', ...($autofocus ? ['required' => true, 'autofocus' => true] : [])],
             ['handle' => 'to', 'type' => 'text', 'label' => __('To'), 'mono' => true, 'placeholder' => __('/new-url or https://…'), ...($autofocus ? ['required' => true] : [])],
-            ['handle' => 'status', 'type' => 'select', 'label' => __('Status'), 'required' => true, 'numeric' => true, 'default' => 301, 'options' => ['301' => __('301 Permanent'), '302' => __('302 Temporary')]],
+            // Every status a redirect can have, in words first: a redirect made elsewhere (307, 308) reads as one too.
+            ['handle' => 'status', 'type' => 'select', 'label' => __('Status'), 'required' => true, 'numeric' => true, 'default' => 301, 'options' => ['301' => __('Permanent (301)'), '302' => __('Temporary (302)'), '307' => __('Temporary (307)'), '308' => __('Permanent (308)')]],
         ];
     }
 
@@ -75,6 +76,12 @@ final class SeoPlugin extends Plugin
         $this->routes();
         $this->abilities();
         $this->redirectsTab();
+
+        // What the Audit Log calls each change, once it has happened.
+        $this->cms()->hooks()->addFilter('audit.past', static fn (array $past): array => $past + [
+            'redirects/create' => __('Created Redirect'),
+            'redirects/set' => __('Saved Redirects'),
+        ]);
 
         $this->cms()->admin()->widget('seo-health', ['label' => 'SEO Health', 'description' => __('How published pages score for search and AI answers, and what to fix first.'), 'icon' => 'seo', 'column' => 'main', 'order' => 45]);
         $this->adminModule();
@@ -215,6 +222,9 @@ final class SeoPlugin extends Plugin
         $hooks = $this->cms()->hooks();
         $files = fn () => $this->app->make(SiteFiles::class);
 
+        // llms.txt is the site's own file: SEO says what it knows about the pages, it does not write a second one.
+        $hooks->addFilter('site.llms', fn (array $document) => $files()->llms($document));
+
         $hooks->addFilter('site.build.extras', fn (array $extras) => [
             ...$extras,
             'sitemap' => ['path' => 'sitemap.xml', 'render' => fn () => $files()->sitemap()],
@@ -223,7 +233,6 @@ final class SeoPlugin extends Plugin
                 array_map(fn (string $locale) => ['path' => $files()->languageSitemaps()[$locale], 'render' => fn () => $files()->sitemap($locale)], $languages),
             ),
             'robots' => ['path' => 'robots.txt', 'render' => fn () => $files()->robots()],
-            'llms' => ['path' => 'llms.txt', 'render' => fn () => $files()->llms()],
             ...($files()->securityTxt() === null ? [] : ['security' => ['path' => '.well-known/security.txt', 'render' => fn () => $files()->securityTxt()]]),
             ...array_combine(
                 array_map(static fn (string $path) => 'feed:'.$path, array_keys($feeds = $this->app->make(Feeds::class)->all())),
@@ -310,11 +319,10 @@ final class SeoPlugin extends Plugin
                 return response($this->app->make(Feeds::class)->render($found['collection'], $found['locale']), 200, ['Content-Type' => 'application/rss+xml; charset=utf-8']);
             })->where('feed', '.*feed\.xml');
             Route::get('/robots.txt', fn () => response($this->app->make(SiteFiles::class)->robots(), 200, ['Content-Type' => 'text/plain; charset=utf-8']));
-            Route::get('/llms.txt', fn () => response($this->app->make(SiteFiles::class)->llms(), 200, ['Content-Type' => 'text/plain; charset=utf-8']));
             Route::get('/.well-known/security.txt', fn () => response($this->app->make(SiteFiles::class)->securityTxt() ?? abort(404), 200, ['Content-Type' => 'text/plain; charset=utf-8']));
             Route::get('/{path}.md', function (string $path) {
                 abort_unless($this->cms()->setting('seo', 'markdown_twins', true), 404);
-                $entry = $this->cms()->entries()->findByUri($path === 'index' ? '/' : '/'.$path);
+                $entry = $this->app->make(MarkdownTwin::class)->at($path === 'index' ? '/' : '/'.$path);
                 abort_if(! $entry || ! $entry->isLive() || ! empty($entry->data['seo']['noindex']) || $this->cms()->entries()->gate()->isGated($entry), 404);
 
                 return response($this->app->make(MarkdownTwin::class)->render($entry), 200, ['Content-Type' => 'text/markdown; charset=utf-8']);

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.10.0 (2026-11-12)
+
+### Added
+
+- A term's archive in a collection (`/blog/topics/tides`, with the core that has them) is in the sitemap of its language, with links to the same term's archives in the other languages, and has a Markdown version, `/blog/topics/tides.md`, that lists the entries filed under the term. A term kept out of search keeps its archives out too.
+- The Audit Log names what SEO changed in the past tense: **Created Redirect**, **Saved Redirects**.
+
+### Changed
+
+- Needs CMS 0.26: a redirect's row button says **Delete** through the core's `removeLabel`, which an older CMS does not have.
+- A redirect's status says what it is first: **Permanent (301)**, **Temporary (302)**, and a 307 or 308 made elsewhere reads **Temporary (307)** or **Permanent (308)** instead of a bare number. A row's button says **Delete**.
+- `seo.sitemap` is told which language's sitemap is being written (`$locale`, `null` on a site with one), and an address that names its `locale` goes in that language's sitemap. One that names none stays in the default language's, as before. One that names an `entry` is left out when that entry is marked noindex, and gets the entry's other languages as alternates.
+- In the SEO panel, **Page Type** shows what applies while nothing is chosen (**Web Page**, or **Article** for a post) as its value, not as a faint hint. **Score** and **What AI Crawlers Read** are two rows of one shape.
+- With no redirects yet, **New Redirect** is offered where the table would be; otherwise it is in the bar, the one place a redirect is made: the table has no add button of its own. On a phone each redirect is a card of its fields.
+- **Breaking.** Needs the core 0.24 or newer, which writes `llms.txt` for every site. SEO no longer writes its own: it makes the site's richer through the `site.llms` filter, with the **Summary for AI**, each page's description, a link to its Markdown twin, and only the pages search engines may list.
+
+### Fixed
+
+- In the SEO panel, a long description shown as the fallback in **Meta Description** is no longer cut off in the middle of a line; the search preview below shows it whole.
+- The search preview's title is the admin's own blue, readable in the dark too.
+
 ## 0.9.0 (2026-11-11)
 
 ### Added

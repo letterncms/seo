@@ -18,7 +18,7 @@ Under Settings → SEO, kept in `config/seo.yaml`:
 - **Home Page Title** (`home_title`): the home page's title; the site name when empty.
 - **Default Social Image** (`default_image`): shown for shared links of pages without their own.
 - **Type**, **Name**, **Logo**, **Profiles** (`org_type`, `org_name`, `org_logo`, `same_as`): who the site is by, for structured data.
-- **Summary for AI (llms.txt)** (`llms_summary`): who you are and what you offer, at the top of `/llms.txt`.
+- **Summary for AI (llms.txt)** (`llms_summary`): who you are and what you offer, at the top of the site's `/llms.txt`, where SEO also gives each page its description and its Markdown twin and leaves out what search engines may not list.
 - **Publish Markdown Versions of Pages** (`markdown_twins`): each page also at its address with `.md`. On by default.
 - **Block These AI Crawlers** (`blocked_crawlers`): crawlers `robots.txt` turns away.
 - **Security Contact** (`security_contact`): where to report vulnerabilities; publishes `/.well-known/security.txt`.
@@ -40,7 +40,7 @@ Each says what it answers with (`output`). The permission `seo.manage` (**Manage
 ## Hooks
 
 - `seo.alternates` (filter): `fn (array $alternates, Entry $entry): array`. The same page in other languages, each `['locale' => 'fr', 'uri' => '/fr/about']`, for `hreflang` links in the head and the sitemap.
-- `seo.sitemap` (filter): `fn (array $urls): array`. Addresses your plugin answers itself, each `['uri' => '/shop', 'updated' => '2026-11-01']`, added to the sitemap.
+- `seo.sitemap` (filter): `fn (array $urls, ?string $locale): array`. Addresses your plugin answers itself, each `['uri' => '/shop', 'updated' => '2026-11-01']`, added to the sitemap. With `'locale' => 'de'` an address goes in that language's sitemap, without in the default language's; `$locale` is the language being written, `null` on a site with one.
 - `redirects.saved` (action): after the redirect list changed.
 - `render.structured` (action it listens to): `dispatch('render.structured', string $key, array $data)` while a page renders adds a node to the page's JSON-LD.
 
