@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.12.0 (2026-11-13)
+
+### Changed
+
+- **Breaking.** Include redirects when exporting a Site using the new Sites API.
+
 ## 0.11.0 (2026-11-12)
 
 ### Changed
